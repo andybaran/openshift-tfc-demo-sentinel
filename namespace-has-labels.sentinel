@@ -1,20 +1,30 @@
 import "tfplan/v2" as tfplan
+import "strings"
 
-# Find all Kubernetes namespace resources
-namespaces = filter tfplan.resource_changes as _, rc {
+# Get all kubernetes_namespace resources
+allNamespaces = filter tfplan.resource_changes as _, rc {
     rc.type is "kubernetes_namespace" and
-  	rc.mode is "managed" and
+    rc.mode is "managed" and
     (rc.change.actions contains "create" or rc.change.actions contains "update")
 }
 
-# Check that each namespace has at least one label
-namespace_has_labels = rule {
-    all namespaces as _, ns {
-			length(string(ns.change.after.metadata[0].labels) else {}) > 0
+# Function to check if namespace has labels
+check_namespace_labels = func(namespace) {
+    # Get the after state which contains the planned configuration
+    config = namespace.change.after
+    metadata = config.metadata[0]
+    # Check if labels exist and are not empty
+    if "labels" not in metadata or metadata.labels is null or length(metadata.labels) == 0 {
+        print("Namespace", namespace.address, "is missing required labels")
+        return false
     }
+    print("Namespace", namespace.address, "has labels:", metadata.labels)
+    return true
 }
 
-# Main rule
+# Main rule - all namespaces must have labels
 main = rule {
-    namespace_has_labels
+    all allNamespaces as _, ns {
+        check_namespace_labels(ns)
+    }
 }
